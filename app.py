@@ -13,7 +13,7 @@ ACCENT = (93, 202, 165)          # vert teal - couleur des detections
 ACCENT_DARK = (24, 60, 50)       # texte fonce sur badge vert clair
 BADGE_BG = (28, 28, 28)          # fond sombre des badges (total, coordonnees)
 GRID_COLOR = (90, 90, 90)        # gris moyen, visible sur fond clair ET fonce
-AXIS_COLOR = (0, 255, 255)       # jaune vif -> tres visible sur fond clair ET fonce
+AXIS_COLOR = (66, 140, 255)      # corail/orange -> complementaire du vert teal, tres visible
 AXIS_OUTLINE = (0, 0, 0)         # contour noir pour renforcer le contraste
 TEXT_WHITE = (255, 255, 255)
 
@@ -97,9 +97,10 @@ def draw_repere(image, frame_width, frame_height, tick_step=100):
 
 def place_total_badge(result, frame_width, frame_height, badge_width, badge_height, margin=20, safety=20):
     boxes = [tuple(map(int, box.xyxy[0].tolist())) for box in result.boxes]
+    top_offset = 16  # juste assez pour degager la rangee de graduations du haut, sans trop descendre
     candidates = [
-        (margin, margin),
-        (frame_width - badge_width - margin, margin),
+        (margin, margin + top_offset),
+        (frame_width - badge_width - margin, margin + top_offset),
         (margin, frame_height - badge_height - margin),
         (frame_width - badge_width - margin, frame_height - badge_height - margin),
     ]
@@ -113,7 +114,7 @@ def place_total_badge(result, frame_width, frame_height, badge_width, badge_heig
     for pos in candidates:
         if is_clear(pos):
             return pos
-    return (margin, margin)
+    return (margin, margin + top_offset)
 
 
 while True:
