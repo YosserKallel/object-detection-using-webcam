@@ -11,10 +11,31 @@ webcamera = cv2.VideoCapture(0)
 
 while True:
     success, frame = webcamera.read()
+    if not success:
+        continue
     
     results = model.predict(frame, conf=0.35, iou=0.5, imgsz=640)
-    cv2.putText(frame, f"Total: {len(results[0].boxes)}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-    cv2.imshow("Live Camera", results[0].plot(conf=True, labels=True))
+    annotated_frame = results[0].plot(conf=True, labels=True)
+
+    for box in results[0].boxes:
+        x1, y1, x2, y2 = box.xyxy[0].tolist()
+        center_x = int((x1 + x2) / 2)
+        center_y = int((y1 + y2) / 2)
+
+        cv2.circle(annotated_frame, (center_x, center_y), 4, (255, 0, 0), -1)
+        cv2.putText(
+            annotated_frame,
+            f"({center_x}, {center_y})",
+            (center_x + 10, center_y - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+    cv2.putText(annotated_frame, f"Total: {len(results[0].boxes)}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+    cv2.imshow("Live Camera", annotated_frame)
 
     if cv2.waitKey(1) == ord('q'):
         break
@@ -28,7 +49,7 @@ cv2.destroyAllWindows()
     #    pipeline = rs.pipeline()
      #   camera_aconfig = rs.config()
       #  camera_aconfig.enable_stream(rs.stream.depth, *config.DEPTH_CAMERA_RESOLUTION, rs.format.z16, config.DEPTH_CAMERA_FPS)
-     #   camera_aconfig.enable_stream(rs.stream.color, *config.COLOR_CAMERA_RESOLUTION, rs.format.bgr8, config.COLOR_CAMERA_FPS)
+     #   camera_aconfig.enable_stream(rs.stream.color, *config.COLOR_CAMERA_RESOLUTION, rs.format.bgr8, COLOR_CAMERA_FPS)
      #   pipeline.start(camera_aconfig)
       #  return pipeline
 # try:
