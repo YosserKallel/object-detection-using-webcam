@@ -9,12 +9,11 @@ webcamera = cv2.VideoCapture(0)
 # ---------------------------------------------------------------------------
 # Palette
 # ---------------------------------------------------------------------------
-ACCENT = (93, 202, 165)          # vert teal - couleur des detections
-ACCENT_DARK = (24, 60, 50)       # texte fonce sur badge vert clair
+ACCENT = (229, 136, 30)          # bleu signal - seule couleur "action" de l'app (detections)
+ACCENT_DARK = (50, 20, 0)        # texte fonce sur le badge bleu clair
 BADGE_BG = (28, 28, 28)          # fond sombre des badges (total, coordonnees)
-GRID_COLOR = (90, 90, 90)        # gris moyen, visible sur fond clair ET fonce
-AXIS_COLOR = (66, 140, 255)      # corail/orange -> complementaire du vert teal, tres visible
-AXIS_OUTLINE = (0, 0, 0)         # contour noir pour renforcer le contraste
+GRID_COLOR = (95, 95, 95)        # gris discret, en arriere-plan
+AXIS_COLOR = (150, 120, 95)      # bleu-gris sourd - present mais ne domine pas l'image
 TEXT_WHITE = (255, 255, 255)
 
 
@@ -47,57 +46,68 @@ def draw_label_chip(image, text, position, font_scale=0.4, text_color=TEXT_WHITE
     draw_text(image, text, (x, y), font_scale, text_color, 1)
 
 
-def draw_axis_letter(image, letter, position, font_scale=0.6):
-    """Lettre d'axe sans badge : contour noir epais puis remplissage jaune,
-    pour se fondre visuellement dans la ligne d'axe plutot que flotter en boite."""
+def draw_axis_letter(image, letter, position, font_scale=0.55):
+    """Lettre d'axe discrete, meme couleur sourde que les axes -> se fond
+    dans la ligne plutot que d'attirer l'oeil comme un badge."""
     cv2.putText(image, letter, position, cv2.FONT_HERSHEY_SIMPLEX,
-                font_scale, AXIS_OUTLINE, 4, cv2.LINE_AA)
-    cv2.putText(image, letter, position, cv2.FONT_HERSHEY_SIMPLEX,
-                font_scale, AXIS_COLOR, 2, cv2.LINE_AA)
+                font_scale, AXIS_COLOR, 1, cv2.LINE_AA)
+
+
+def to_math_coords(px, py, origin_x, origin_y):
+    """Convertit des coordonnees pixel (origine en haut a gauche, Y vers le bas)
+    en coordonnees mathematiques (origine au centre, Y vers le haut)."""
+    return px - origin_x, origin_y - py
 
 
 def draw_repere(image, frame_width, frame_height, tick_step=100):
     """
-    Grille + axes vraiment visibles quel que soit le fond :
-    - grille secondaire en gris moyen semi-transparent (visible sur fond clair et fonce)
-    - 2 axes principaux (x=0, y=0) en jaune vif avec contour noir -> tres marques
-    - chaque valeur de graduation a son propre petit fond, donc toujours lisible
-    - lettres "X" et "Y" affichees a l'extremite de chaque axe
+    Grille + axes centres sur l'image, comme un repere mathematique :
+    - l'origine (0,0) est au milieu du cadre
+    - l'axe Y pointe vers le haut (valeurs positives au-dessus du centre)
+    - l'axe X pointe vers la droite (valeurs positives a droite du centre)
+    - chaque graduation affiche sa valeur "mathematique", pas sa position pixel
     """
+    origin_x, origin_y = frame_width // 2, frame_height // 2
+
     grid_overlay = image.copy()
-    for x in range(tick_step, frame_width, tick_step):
+    for x in range(origin_x % tick_step, frame_width, tick_step):
         cv2.line(grid_overlay, (x, 0), (x, frame_height - 1), GRID_COLOR, 1, cv2.LINE_AA)
-    for y in range(tick_step, frame_height, tick_step):
+    for y in range(origin_y % tick_step, frame_height, tick_step):
         cv2.line(grid_overlay, (0, y), (frame_width - 1, y), GRID_COLOR, 1, cv2.LINE_AA)
-    cv2.addWeighted(grid_overlay, 0.35, image, 0.65, 0, image)
+    cv2.addWeighted(grid_overlay, 0.25, image, 0.75, 0, image)
 
-    # --- axe X (horizontal, y=0) : contour noir puis ligne jaune par-dessus ---
-    cv2.line(image, (0, 0), (frame_width - 1, 0), AXIS_OUTLINE, 5, cv2.LINE_AA)
-    cv2.line(image, (0, 0), (frame_width - 1, 0), AXIS_COLOR, 3, cv2.LINE_AA)
+    # --- axe X (horizontal, passe par le centre) ---
+    cv2.line(image, (0, origin_y), (frame_width - 1, origin_y), AXIS_COLOR, 1, cv2.LINE_AA)
 
-    # --- axe Y (vertical, x=0) : contour noir puis ligne jaune par-dessus ---
-    cv2.line(image, (0, 0), (0, frame_height - 1), AXIS_OUTLINE, 5, cv2.LINE_AA)
-    cv2.line(image, (0, 0), (0, frame_height - 1), AXIS_COLOR, 3, cv2.LINE_AA)
+    # --- axe Y (vertical, passe par le centre) ---
+    cv2.line(image, (origin_x, 0), (origin_x, frame_height - 1), AXIS_COLOR, 1, cv2.LINE_AA)
 
-    for x in range(tick_step, frame_width, tick_step):
-        draw_label_chip(image, str(x), (x - 12, 22), font_scale=0.4)
+    # --- graduations X : valeur mathematique = x_pixel - origin_x ---
+    for x in range(origin_x % tick_step, frame_width, tick_step):
+        math_x = x - origin_x
+        if math_x == 0:
+            continue
+        draw_label_chip(image, str(math_x), (x - 12, origin_y + 20), font_scale=0.4)
 
-    for y in range(tick_step, frame_height, tick_step):
-        draw_label_chip(image, str(y), (10, y + 5), font_scale=0.4)
+    # --- graduations Y : valeur mathematique = origin_y - y_pixel (inversee) ---
+    for y in range(origin_y % tick_step, frame_height, tick_step):
+        math_y = origin_y - y
+        if math_y == 0:
+            continue
+        draw_label_chip(image, str(math_y), (origin_x + 8, y + 5), font_scale=0.4)
 
-    draw_label_chip(image, "(0,0)", (10, 22), font_scale=0.4)
+    draw_label_chip(image, "(0,0)", (origin_x + 8, origin_y + 20), font_scale=0.4)
 
     # --- lettres "X" et "Y" a l'extremite de chaque axe ---
-    # Texte "flottant" directement sur la ligne (contour noir epais + jaune fin),
-    # meme traitement visuel que les axes -> se lit comme une prolongation de
-    # la ligne plutot que comme un badge separe.
-    draw_axis_letter(image, "X", (frame_width - 22, 34))
-    draw_axis_letter(image, "Y", (6, frame_height - 12))
+    draw_axis_letter(image, "X", (frame_width - 22, origin_y - 10))
+    draw_axis_letter(image, "Y", (origin_x + 10, 20))
+
+    return origin_x, origin_y
 
 
 def place_total_badge(result, frame_width, frame_height, badge_width, badge_height, margin=20, safety=20):
     boxes = [tuple(map(int, box.xyxy[0].tolist())) for box in result.boxes]
-    top_offset = 16  # juste assez pour degager la rangee de graduations du haut, sans trop descendre
+    top_offset = 16
     candidates = [
         (margin, margin + top_offset),
         (frame_width - badge_width - margin, margin + top_offset),
@@ -128,8 +138,8 @@ while True:
     frame_height, frame_width = annotated.shape[:2]
     margin = 12
 
-    # --- repere (grille + axes), toujours en dessous de tout le reste ---
-    draw_repere(annotated, frame_width, frame_height, tick_step=100)
+    # --- repere (grille + axes centres), toujours en dessous de tout le reste ---
+    origin_x, origin_y = draw_repere(annotated, frame_width, frame_height, tick_step=100)
 
     # --- badge total ---
     total_text = f"Total: {len(result.boxes)}"
@@ -156,7 +166,9 @@ while True:
                            ACCENT, 0.85, radius=6)
         draw_text(annotated, label_text, (x1 + 7, label_top + lh + 4), 0.5, ACCENT_DARK, 1)
 
-        coord_text = f"({cx}, {cy})"
+        # coordonnees affichees en repere mathematique (centre, Y vers le haut)
+        math_cx, math_cy = to_math_coords(cx, cy, origin_x, origin_y)
+        coord_text = f"({math_cx}, {math_cy})"
         coord_top = cy + 12 if cy + 36 < frame_height - margin else cy - 36
         draw_rounded_rect(annotated, (cx + 10, coord_top), (cx + 102, coord_top + 24),
                            BADGE_BG, 0.6, radius=6)
