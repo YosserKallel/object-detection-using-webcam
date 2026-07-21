@@ -31,6 +31,11 @@ rclpy.init()
 ros_node = ObjectPublisher()
 
 model = YOLO('yolov8s.pt')
+
+target_object = input("Enter object to follow: ").strip().lower()
+
+print(f"Following only: {target_object}")
+
 webcamera = cv2.VideoCapture(0)
 
 # ---------------------------------------------------------------------------
@@ -161,6 +166,15 @@ while True:
 
     results = model.predict(frame, conf=0.35, iou=0.5, imgsz=640, verbose=False)
     result = results[0]
+    # Keep only the selected object
+    selected_boxes = []
+
+    for box in result.boxes:
+        class_name = result.names[int(box.cls.item())].lower()
+
+        if class_name == target_object:
+            selected_boxes.append(box)
+
     annotated = frame.copy()
     frame_height, frame_width = annotated.shape[:2]
     margin = 12
@@ -169,7 +183,7 @@ while True:
     origin_x, origin_y = draw_repere(annotated, frame_width, frame_height, tick_step=100)
 
     # --- badge total ---
-    total_text = f"Total: {len(result.boxes)}"
+    total_text = f"Total: {len(selected_boxes)}"
     (tw, th), _ = cv2.getTextSize(total_text, cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)
     badge_w, badge_h = tw + 24, th + 18
     bx, by = place_total_badge(result, frame_width, frame_height, badge_w, badge_h, margin=20, safety=24)
@@ -178,7 +192,7 @@ while True:
 
     # --- detections ---
     detected_points = []
-    for box in result.boxes:
+    for box in selected_boxes:
         x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         class_name = result.names[int(box.cls.item())]
