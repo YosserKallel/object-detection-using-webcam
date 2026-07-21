@@ -47,7 +47,14 @@ BADGE_BG = (28, 28, 28)          # fond sombre des badges (total, coordonnees)
 GRID_COLOR = (95, 95, 95)        # gris discret, en arriere-plan
 AXIS_COLOR = (150, 120, 95)      # bleu-gris sourd - present mais ne domine pas l'image
 TEXT_WHITE = (255, 255, 255)
+# ---------------- Safety workspace (camera pixels) ----------------
+# You will tune these values manually from the live camera
 
+SAFE_X_MIN = 120
+SAFE_X_MAX = 520
+
+SAFE_Y_MIN = 80
+SAFE_Y_MAX = 360
 
 def draw_rounded_rect(image, top_left, bottom_right, color, alpha, radius=8):
     overlay = image.copy()
@@ -158,7 +165,11 @@ def place_total_badge(result, frame_width, frame_height, badge_width, badge_heig
             return pos
     return (margin, margin + top_offset)
 
+def clamp_to_safe_frame(x, y):
+    safe_x = max(SAFE_X_MIN, min(x, SAFE_X_MAX))
+    safe_y = max(SAFE_Y_MIN, min(y, SAFE_Y_MAX))
 
+    return safe_x, safe_y
 while True:
     success, frame = webcamera.read()
     if not success:
@@ -181,7 +192,13 @@ while True:
 
     # --- repere (grille + axes centres), toujours en dessous de tout le reste ---
     origin_x, origin_y = draw_repere(annotated, frame_width, frame_height, tick_step=100)
-
+    cv2.rectangle(
+        annotated,
+        (SAFE_X_MIN, SAFE_Y_MIN),
+        (SAFE_X_MAX, SAFE_Y_MAX),
+        (0, 255, 0),
+        2
+    )
     # --- badge total ---
     total_text = f"Total: {len(selected_boxes)}"
     (tw, th), _ = cv2.getTextSize(total_text, cv2.FONT_HERSHEY_SIMPLEX, 0.72, 2)
@@ -209,9 +226,25 @@ while True:
         draw_text(annotated, label_text, (x1 + 7, label_top + lh + 4), 0.5, ACCENT_DARK, 1)
 
         # coordonnees affichees en repere mathematique (centre, Y vers le haut)
-        math_cx, math_cy = to_math_coords(cx, cy, origin_x, origin_y)
-        detected_points.append((math_cx, math_cy))
-        coord_text = f"({math_cx}, {math_cy})"
+        # Check safety frame using camera pixels first
+        safe_cx, safe_cy = clamp_to_safe_frame(cx, cy)
+        cv2.circle(
+            annotated,
+            (safe_cx, safe_cy),
+            6,
+            (0, 255, 0),
+            -1
+        )
+
+        # Convert the SAFE pixel position to your math coordinates
+        safe_math_x, safe_math_y = to_math_coords(
+            safe_cx,
+            safe_cy,
+            origin_x,
+            origin_y
+        )
+        detected_points.append((safe_math_x, safe_math_y))
+        coord_text = f"({safe_math_x}, {safe_math_y})"
         coord_top = cy + 12 if cy + 36 < frame_height - margin else cy - 36
         draw_rounded_rect(annotated, (cx + 10, coord_top), (cx + 102, coord_top + 24),
                            BADGE_BG, 0.6, radius=6)
