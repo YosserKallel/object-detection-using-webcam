@@ -1,7 +1,34 @@
 # pip install opencv-python ultralytics
-
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import PoseArray, Pose
 import cv2
 from ultralytics import YOLO
+class ObjectPublisher(Node):
+
+    def __init__(self):
+        super().__init__('object_detector')
+        self.publisher = self.create_publisher(
+            PoseArray,
+            '/detected_objects_xy',
+            10
+        )
+
+    def publish_positions(self, points):
+        """points: list of (x, y) tuples, one per detected object."""
+        msg = PoseArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "camera"
+        for x, y in points:
+            pose = Pose()
+            pose.position.x = float(x)
+            pose.position.y = float(y)
+            pose.position.z = 0.0
+            msg.poses.append(pose)
+        self.publisher.publish(msg)
+rclpy.init()
+
+ros_node = ObjectPublisher()
 
 model = YOLO('yolov8s.pt')
 webcamera = cv2.VideoCapture(0)
@@ -150,6 +177,7 @@ while True:
     draw_text(annotated, total_text, (bx + 12, by + th + 9), 0.72, TEXT_WHITE, 2)
 
     # --- detections ---
+    detected_points = []
     for box in result.boxes:
         x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -168,15 +196,20 @@ while True:
 
         # coordonnees affichees en repere mathematique (centre, Y vers le haut)
         math_cx, math_cy = to_math_coords(cx, cy, origin_x, origin_y)
+        detected_points.append((math_cx, math_cy))
         coord_text = f"({math_cx}, {math_cy})"
         coord_top = cy + 12 if cy + 36 < frame_height - margin else cy - 36
         draw_rounded_rect(annotated, (cx + 10, coord_top), (cx + 102, coord_top + 24),
                            BADGE_BG, 0.6, radius=6)
         draw_text(annotated, coord_text, (cx + 16, coord_top + 16), 0.42, TEXT_WHITE, 1)
 
+    ros_node.publish_positions(detected_points)
     cv2.imshow("Live Camera", annotated)
     if cv2.waitKey(1) == ord('q'):
         break
 
 webcamera.release()
 cv2.destroyAllWindows()
+
+ros_node.destroy_node()
+rclpy.shutdown()
