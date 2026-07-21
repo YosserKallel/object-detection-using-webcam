@@ -21,6 +21,7 @@ subscribe to.
 
 Stop this script anytime with Ctrl+C.
 """
+import math
 
 import rclpy
 from rclpy.node import Node
@@ -48,6 +49,9 @@ TICK_PERIOD_SECONDS = 4.0   # how often we send the next object in the queue
 PIXEL_RANGE = 320.0
 JOINT_LIMIT = 1.5
 
+NEUTRAL_J1 = math.radians(71.434)
+NEUTRAL_J2 = math.radians(-43.208)
+NEUTRAL_J3 = math.radians(-46.002)
 
 def clamp(value, low, high):
     return max(low, min(high, value))
@@ -60,10 +64,17 @@ def pixel_to_joint(px):
 
 
 def build_joint_positions(x_pixel, y_pixel):
-    """Only joint_1 (from x) and joint_2 (from y) move. Joints 3-6 stay at 0."""
-    j1 = pixel_to_joint(x_pixel)
-    j2 = pixel_to_joint(y_pixel)
-    return [j1, j2, 0.0, 0.0, 0.0, 0.0]
+    j1 = NEUTRAL_J1 + pixel_to_joint(x_pixel)
+    j2 = NEUTRAL_J2 + pixel_to_joint(y_pixel)
+
+    return [
+        j1,
+        j2,
+        NEUTRAL_J3,
+        0.0,
+        0.0,
+        0.0
+    ]
 
 
 class DetectedCoordSender(Node):
@@ -97,9 +108,20 @@ class DetectedCoordSender(Node):
 
     def send_next(self):
         if not self.latest_points:
-            self.get_logger().info('No objects currently detected, skipping this tick.')
-            return
+            self.get_logger().info('No objects detected. Returning to neutral position.')
 
+            self.send_target(
+                [
+                    NEUTRAL_J1,
+                    NEUTRAL_J2,
+                    NEUTRAL_J3,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                TIME_TO_REACH_SECONDS
+            )
+            return
         # Wrap the index so it cycles: 0, 1, 2, 0, 1, 2, ...
         self.queue_index = self.queue_index % len(self.latest_points)
         x, y = self.latest_points[self.queue_index]
